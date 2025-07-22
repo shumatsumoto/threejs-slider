@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { gsap } from "gsap";
+import { GUI } from "lil-gui";
 import vertexShader from "./shaders/vertex.glsl";
 import fragmentShader from "./shaders/fragment.glsl";
 
@@ -58,11 +59,20 @@ class Slider {
     this.textures = null;
     this.mat = null;
     this.disp = null;
+    this.gui = null;
+
+    // GUIコントロール用のパラメータ
+    this.guiParams = {
+      dispPower: 0.0,
+      intensity: this.options.intensity,
+      autoTransition: true,
+    };
 
     // ホイールイベントのスロットリング
     this.lastWheelTime = 0;
     this.wheelThreshold = 800; // ホイールイベント間の間隔（800ms）
   }
+
   bindAll() {
     [
       "render",
@@ -72,6 +82,99 @@ class Slider {
       "handleWheel",
     ].forEach((fn) => (this[fn] = this[fn].bind(this)));
   }
+
+  setupGUI() {
+    this.gui = new GUI();
+    this.gui.title("Displacement Slider Controls");
+
+    // dispPowerコントロール
+    this.gui
+      .add(this.guiParams, "dispPower", 0, 1, 0.01)
+      .name("Displacement Power")
+      .onChange((value) => {
+        if (this.mat) {
+          this.mat.uniforms.dispPower.value = value;
+          this.render();
+        }
+      });
+
+    // intensityコントロール
+    this.gui
+      .add(this.guiParams, "intensity", 0, 2, 0.1)
+      .name("Intensity")
+      .onChange((value) => {
+        if (this.mat) {
+          this.mat.uniforms.intensity.value = value;
+          this.render();
+        }
+      });
+
+    // 自動トランジションの有効/無効
+    this.gui
+      .add(this.guiParams, "autoTransition")
+      .name("Auto Transition")
+      .onChange((value) => {
+        // この値は他のメソッドで参照される
+      });
+
+    // 手動でトランジションを実行するボタン
+    this.gui
+      .add(
+        {
+          triggerTransition: () => {
+            if (!this.state.animating) {
+              this.nextSlide();
+            }
+          },
+        },
+        "triggerTransition"
+      )
+      .name("Trigger Transition");
+
+    // dispPowerを0にリセットするボタン
+    this.gui
+      .add(
+        {
+          resetDispPower: () => {
+            this.guiParams.dispPower = 0;
+            if (this.mat) {
+              this.mat.uniforms.dispPower.value = 0;
+              this.render();
+            }
+            // GUIの表示も更新
+            this.gui.controllers.forEach((controller) => {
+              if (controller.property === "dispPower") {
+                controller.updateDisplay();
+              }
+            });
+          },
+        },
+        "resetDispPower"
+      )
+      .name("Reset Displacement");
+
+    // フォルダーを作成してテクスチャ情報を表示
+    const infoFolder = this.gui.addFolder("Info");
+    infoFolder
+      .add({ currentSlide: 0 }, "currentSlide")
+      .name("Current Slide")
+      .listen();
+    infoFolder.add({ nextSlide: 1 }, "nextSlide").name("Next Slide").listen();
+
+    // リアルタイムでスライド情報を更新
+    this.updateGUIInfo = () => {
+      infoFolder.controllers.forEach((controller) => {
+        if (controller.property === "currentSlide") {
+          controller.object.currentSlide = this.data.current;
+        }
+        if (controller.property === "nextSlide") {
+          controller.object.nextSlide = this.data.next;
+        }
+        controller.updateDisplay();
+      });
+    };
+  }
+
   setStyles() {
     // 弾丸ナビゲーションのスタイルを初期化
     this.bullets.forEach((bullet, index) => {
@@ -87,6 +190,7 @@ class Slider {
       }
     });
   }
+
   cameraSetup() {
     this.camera = new THREE.OrthographicCamera(
       this.el.offsetWidth / -2,
@@ -99,6 +203,7 @@ class Slider {
     this.camera.lookAt(this.scene.position);
     this.camera.position.z = 1;
   }
+
   setup() {
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock(true);
@@ -109,6 +214,7 @@ class Slider {
     this.renderer.setSize(this.el.offsetWidth, this.el.offsetHeight);
     this.inner.appendChild(this.renderer.domElement);
   }
+
   async loadTextures() {
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = "";
@@ -150,11 +256,12 @@ class Slider {
       console.error("Error loading textures:", error);
     }
   }
+
   createMesh() {
     this.mat = new THREE.ShaderMaterial({
       uniforms: {
-        dispPower: { value: 0.0 },
-        intensity: { value: this.options.intensity },
+        dispPower: { value: this.guiParams.dispPower },
+        intensity: { value: this.guiParams.intensity },
         res: {
           value: new THREE.Vector2(window.innerWidth, window.innerHeight),
         },
@@ -175,7 +282,14 @@ class Slider {
     const mesh = new THREE.Mesh(geometry, this.mat);
     this.scene.add(mesh);
   }
+
   transition() {
+    // 自動トランジションが無効の場合は実行しない
+    if (!this.guiParams.autoTransition) {
+      console.log("Auto transition is disabled");
+      return;
+    }
+
     console.log("Transition starting:", {
       current: this.data.current,
       next: this.data.next,
@@ -187,11 +301,35 @@ class Slider {
       duration: this.options.duration,
       value: 1,
       ease: "expo.inOut",
-      onUpdate: this.render,
+      onUpdate: () => {
+        // GUIパラメータも同期
+        this.guiParams.dispPower = this.mat.uniforms.dispPower.value;
+        this.gui.controllers.forEach((controller) => {
+          if (controller.property === "dispPower") {
+            controller.updateDisplay();
+          }
+        });
+        this.render();
+      },
       onComplete: () => {
         this.mat.uniforms.dispPower.value = 0.0;
+        this.guiParams.dispPower = 0.0;
+
+        // GUIの表示を更新
+        this.gui.controllers.forEach((controller) => {
+          if (controller.property === "dispPower") {
+            controller.updateDisplay();
+          }
+        });
+
         this.changeTexture();
         this.state.animating = false;
+
+        // GUI情報を更新
+        if (this.updateGUIInfo) {
+          this.updateGUIInfo();
+        }
+
         console.log("Transition completed, animating set to false");
       },
     });
@@ -216,6 +354,7 @@ class Slider {
       }
     });
   }
+
   nextSlide() {
     if (this.state.animating) return;
 
@@ -240,6 +379,7 @@ class Slider {
 
     this.transition();
   }
+
   changeTexture() {
     // texture1: 現在表示中の画像のテクスチャ
     // texture2: 次に表示する画像のテクスチャ
@@ -250,6 +390,7 @@ class Slider {
     console.log("texture1 (current):", this.textures[this.data.current]);
     console.log("texture2 (next):", this.textures[this.data.next]);
   }
+
   listeners() {
     console.log("Setting up event listeners...");
 
@@ -341,6 +482,11 @@ class Slider {
   }
 
   dispose() {
+    // GUIを破棄
+    if (this.gui) {
+      this.gui.destroy();
+    }
+
     // イベントリスナーを削除
     window.removeEventListener("wheel", this.handleWheel);
     window.removeEventListener("keydown", this.handleKeydown);
@@ -368,15 +514,18 @@ class Slider {
     gsap.killTweensOf(this.slides);
     gsap.killTweensOf(this.bullets);
   }
+
   render() {
     this.renderer.render(this.scene, this.camera);
   }
+
   async init() {
     this.setup();
     this.cameraSetup();
     await this.loadTextures();
     this.createMesh();
     this.setStyles();
+    this.setupGUI(); // GUIを初期化
     this.render();
     this.listeners();
   }
