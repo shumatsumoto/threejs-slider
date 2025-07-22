@@ -23,3 +23,18 @@ vec2 backgroundCoverUV(vec2 screenSize, vec2 imageSize, vec2 uv) {
 
   return (uv * newSize + newOffset) / screenSize;
 }
+
+void main() {
+  vec2 uv = vUv;
+
+  vec4 disp = texture(disp, uv);
+  vec2 dispVec = vec2(disp.r, disp.g);
+
+  vec2 distPos1 = uv + (dispVec * intensity * dispPower);
+  vec2 distPos2 = uv + (dispVec * -(intensity * (1.0 - dispPower)));
+
+  vec4 _texture1 = texture(texture1, distPos1);
+  vec4 _texture2 = texture(texture2, distPos2);
+
+  gl_FragColor = mix(_texture1, _texture2, dispPower);
+}
