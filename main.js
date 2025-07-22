@@ -36,11 +36,7 @@ class Slider {
   }
 
   initData() {
-    this.images = [
-      "https://s3-us-west-2.amazonaws.com/s.cdpn.io/58281/bg1.jpg",
-      "https://s3-us-west-2.amazonaws.com/s.cdpn.io/58281/bg2.jpg",
-      "https://s3-us-west-2.amazonaws.com/s.cdpn.io/58281/bg3.jpg",
-    ];
+    this.images = ["/images/bg1.jpg", "/images/bg2.jpg", "/images/bg3.jpg"];
 
     this.data = {
       current: 0,
