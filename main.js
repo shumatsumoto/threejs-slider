@@ -222,12 +222,7 @@ class Slider {
     try {
       // ディスプレイスメントテクスチャを読み込み
       this.disp = await new Promise((resolve, reject) => {
-        loader.load(
-          "https://s3-us-west-2.amazonaws.com/s.cdpn.io/58281/rock-_disp.png",
-          resolve,
-          undefined,
-          reject
-        );
+        loader.load("/images/rock-_disp.png", resolve, undefined, reject);
       });
       this.disp.magFilter = this.disp.minFilter = THREE.LinearFilter;
       this.disp.wrapS = this.disp.wrapT = THREE.RepeatWrapping;
